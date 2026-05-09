@@ -1,60 +1,98 @@
-# tt_um_alu4_sma — SMA Global Placement · ISCAS'89 · ASAP7 7nm
+# tt_um_alu4_sma — SMA Global Placement · ISCAS'85 + ISCAS'89 · ASAP7 7nm
 
-> Slime Mould Algorithm (SMA) applied to global placement of ISCAS '89 sequential
-> benchmark circuits on the **ASAP7 7nm predictive PDK**, driving the
-> [OpenLane](https://github.com/olofk/openlane) RTL→GDSII flow and producing a
-> [TinyTapeout](https://github.com/TinyTapeout/tt-chip-rom)-compatible ROM image.
+> **Slime Mould Algorithm (SMA)** applied to global placement of all
+> **ISCAS '85** (11 combinational) and **ISCAS '89** (28 sequential) benchmark
+> circuits on the **ASAP7 7nm predictive PDK**, with OpenLane RTL→GDSII
+> integration and TinyTapeout ROM support.
 
 ---
 
-## DIE Area — Chip Layout Visualisations
+## Full Benchmark Results Table
 
-### ISCAS'89 s27 (24 cells · 16.2 × 16.2 µm · ASAP7)
+![SMA Results Table](visuals/sma_results_table.png)
 
+### ISCAS '85 — Combinational Benchmarks (ASAP7 7nm)
+
+| Circuit | Cells | Nets | Grid | Die (µm²) | Init HPWL | SMA HPWL | Δ % | Agents | Iters | t (s) |
+|---------|------:|-----:|------|-----------:|----------:|---------:|----:|-------:|------:|------:|
+| c17     |    13 |   11 | 10×10 | 10.8×10.8 |       132 |       68 | **48.5** | 15 | 100 | 3.1 |
+| c432    |   203 |  196 | 25×25 | 27.0×27.0 |     5 576 |    5 176 |   7.2 | 12 |  60 | 2.2 |
+| c499    |   275 |  243 | 30×30 | 32.4×32.4 |     8 712 |    8 015 |   8.0 | 12 |  60 | 1.9 |
+| c880    |   469 |  443 | 35×35 | 37.8×37.8 |    18 362 |   17 302 |   5.8 | 12 |  60 | 1.7 |
+| c1355   |   619 |  587 | 40×40 | 43.2×43.2 |    27 821 |   26 351 |   5.3 | 10 |  40 | 1.1 |
+| c1908   |   938 |  913 | 50×50 | 54.0×54.0 |    53 977 |   50 885 |   5.7 | 10 |  40 | 1.7 |
+| c2670   | 1 566 |1 426 | 60×60 | 64.8×64.8 |    98 515 |   96 050 |   2.5 | 10 |  40 | 1.5 |
+| c3540   | 1 741 |1 719 | 65×65 | 70.2×70.2 |   130 832 |  123 851 |   5.3 | 10 |  40 | 2.0 |
+| c5315   | 2 608 |2 485 | 75×75 | 81.0×81.0 |   218 530 |  212 016 |   3.0 |  8 |  25 | 1.2 |
+| c6288   | 2 480 |2 448 | 75×75 | 81.0×81.0 |   212 803 |  209 901 |   1.4 |  8 |  25 | 1.4 |
+| c7552   | 3 827 |3 719 | 90×90 | 97.2×97.2 |   389 234 |  382 784 |   1.7 |  8 |  25 | 1.3 |
+
+### ISCAS '89 — Sequential Benchmarks (ASAP7 7nm)
+
+| Circuit | Cells | Nets | Grid | Die (µm²) | Init HPWL | SMA HPWL | Δ % | Agents | Iters | t (s) |
+|---------|------:|-----:|------|-----------:|----------:|---------:|----:|-------:|------:|------:|
+| s27     |    24 |   13 | 10×10 | 10.8×10.8 |       166 |      113 | **31.9** | 15 | 100 | 6.0 |
+| s208    |   125 |  112 | 20×20 | 21.6×21.6 |     2 464 |    2 485 |  -0.9 | 12 |  60 | 1.6 |
+| s298    |   142 |  133 | 20×20 | 21.6×21.6 |     2 939 |    3 130 |  -6.5 | 12 |  60 | 2.5 |
+| s344    |   195 |  175 | 25×25 | 27.0×27.0 |     4 863 |    4 859 |   0.1 | 12 |  60 | 1.7 |
+| s349    |   196 |  176 | 25×25 | 27.0×27.0 |     4 980 |    4 871 |   2.2 | 12 |  60 | 1.6 |
+| s382    |   188 |  179 | 25×25 | 27.0×27.0 |     5 084 |    4 689 |   7.8 | 12 |  60 | 2.0 |
+| s400    |   193 |  184 | 25×25 | 27.0×27.0 |     5 225 |    5 080 |   2.8 | 12 |  60 | 1.5 |
+| s420    |   234 |  213 | 25×25 | 27.0×27.0 |     6 169 |    5 892 |   4.5 | 12 |  60 | 2.2 |
+| s444    |   211 |  202 | 25×25 | 27.0×27.0 |     5 787 |    5 656 |   2.3 | 12 |  60 | 1.4 |
+| s510    |   243 |  217 | 25×25 | 27.0×27.0 |     5 959 |    5 798 |   2.7 | 12 |  60 | 1.3 |
+| s526    |   224 |  214 | 25×25 | 27.0×27.0 |     6 151 |    5 900 |   4.1 | 12 |  60 | 1.4 |
+| s641    |   457 |  398 | 35×35 | 37.8×37.8 |    16 275 |   15 384 |   5.5 | 12 |  60 | 1.7 |
+| s713    |   470 |  412 | 35×35 | 37.8×37.8 |    16 799 |   15 871 |   5.5 | 12 |  60 | 1.6 |
+| s820    |   331 |  294 | 30×30 | 32.4×32.4 |    10 349 |    9 923 |   4.1 | 12 |  60 | 1.8 |
+| s832    |   329 |  292 | 30×30 | 32.4×32.4 |    10 314 |    9 714 |   5.8 | 12 |  60 | 1.4 |
+| s953    |   492 |  453 | 35×35 | 37.8×37.8 |    18 923 |   17 063 | **9.8** | 12 |  60 | 1.2 |
+| s1196   |   593 |  565 | 40×40 | 43.2×43.2 |    25 824 |   24 555 |   4.9 | 10 |  40 | 0.8 |
+| s1238   |   554 |  526 | 40×40 | 43.2×43.2 |    24 485 |   23 367 |   4.6 | 10 |  40 | 0.7 |
+| s1423   |   753 |  731 | 45×45 | 48.6×48.6 |    39 104 |   36 976 |   5.4 | 10 |  40 | 0.8 |
+| s1488   |   686 |  659 | 40×40 | 43.2×43.2 |    30 790 |   29 069 |   5.6 | 10 |  40 | 0.9 |
+| s1494   |   680 |  653 | 40×40 | 43.2×43.2 |    30 745 |   29 434 |   4.3 | 10 |  40 | 0.7 |
+| s5378   | 3 042 |2 958 | 80×80 | 86.4×86.4 |   275 070 |  260 954 |   5.1 |  8 |  25 | 0.9 |
+| s9234   | 5 900 |5 825 | 115×115 | 124.2×124.2 | 779 353 | 772 001 | 0.9 | 8 | 25 | 1.3 |
+| s13207  | 8 834 |8 620 | 135×135 | 145.8×145.8 | 1 350 083 | 1 331 557 | 1.4 | 8 | 25 | 2.0 |
+| s15850  |10 596 |10 369| 150×150 | 162.0×162.0 | 1 807 459 | 1 799 334 | 0.4 | 5 | 15 | 0.9 |
+| s35932  |18 148 |17 793| 195×195 | 210.6×210.6 | 4 040 799 | 4 014 669 | 0.6 | 5 | 15 | 1.3 |
+| s38417  |23 949 |23 815| 225×225 | 243.0×243.0 | 6 248 361 | 6 213 906 | 0.6 | 5 | 15 | 1.9 |
+| s38584  |20 995 |20 705| 210×210 | 226.8×226.8 | 5 073 514 | 5 046 041 | 0.5 | 5 | 15 | 1.7 |
+
+> **Total runtime: 64.3 s · Mean HPWL improvement: 5.4% · 39 circuits**
+> Adaptive token budget: ≤ 1 500 agent-iterations per circuit.
+
+---
+
+## DIE Area — Chip Layout Samples
+
+### ISCAS'85 c17 (13 cells · 10.8×10.8 µm · ASAP7) — 48.5% improvement
+![c17 chip layout](visuals/chip_layout_c17.png)
+
+### ISCAS'85 c880 (469 cells · 37.8×37.8 µm · ASAP7)
+![c880 chip layout](visuals/chip_layout_c880.png)
+
+### ISCAS'89 s27 (24 cells · 10.8×10.8 µm · ASAP7) — 31.9% improvement
 ![s27 chip layout](visuals/chip_layout_s27.png)
 
-*s27: 10 combinational gates + 3 flip-flops + 7 PIs + 4 POs, placed on a
-15 × 15 ASAP7 grid (1 unit = 1.08 µm row height).
-Dashed coloured boxes show per-net HPWL bounding rectangles.
-VDD/VSS power-rail stripes alternate every standard-cell row.*
+### ISCAS'89 s953 (492 cells · 37.8×37.8 µm · ASAP7) — 9.8% improvement
+![s953 chip layout](visuals/chip_layout_s953.png)
 
----
-
-### ISCAS'89 s344 (195 cells · 32.4 × 32.4 µm · ASAP7)
-
-![s344 chip layout](visuals/chip_layout_s344.png)
-
-*s344: 160 gates + 15 flip-flops + 9 PIs + 11 POs on a 30 × 30 ASAP7 grid.*
-
----
-
-### ISCAS'89 s1196 (593 cells · 54.0 × 54.0 µm · ASAP7)
-
-![s1196 chip layout](visuals/chip_layout_s1196.png)
-
-*s1196: 547 gates + 18 flip-flops + 14 PIs + 14 POs on a 50 × 50 ASAP7 grid.*
+### ISCAS'89 s1423 (753 cells · 48.6×48.6 µm · ASAP7)
+![s1423 chip layout](visuals/chip_layout_s1423.png)
 
 ---
 
 ## SMA Convergence
 
-![Convergence plot](visuals/convergence.png)
-
-Best fitness (HPWL + constraint penalty) vs iteration for all three benchmarks.
-The adaptive shrink factor `a = arctanh(1 − t/T)` drives rapid early exploitation
-while preserving late-stage exploration.
+![Convergence](visuals/convergence.png)
 
 ---
 
-## HPWL Improvement (Initial → SMA-Optimised)
+## HPWL Improvement (All Circuits)
 
-![HPWL comparison](visuals/hpwl_comparison.png)
-
-| Circuit | Cells | Initial HPWL | SMA HPWL | Improvement |
-|---------|------:|-------------:|---------:|----------:|
-| s27     |    24 |       ≈ 372  |   ≈ 262  |  ~29.6 %  |
-| s344    |   195 |     ≈ 6 051  | ≈ 5 803  |   ~4.1 %  |
-| s1196   |   593 |    ≈ 32 263  | ≈ 30 992 |   ~3.9 %  |
+![HPWL Comparison](visuals/hpwl_comparison.png)
 
 ---
 
@@ -62,168 +100,117 @@ while preserving late-stage exploration.
 
 ```
 .
-├── benchmarks/                   # ISCAS '89 circuit models
-│   └── iscas89.py                # s27, s344, s1196 — exact published counts
-├── sma/                          # Slime Mould Algorithm engine
-│   ├── placement.py              # SMA: N agents × 100 iter, adaptive vb/W
-│   └── metrics.py                # HPWL + pairwise/density constraint penalty
-├── visualize/                    # Matplotlib visualisation suite
-│   ├── chip_layout.py            # DIE area chip layout (cells, rails, nets, bbox)
-│   └── convergence.py            # Convergence + HPWL bar chart
-├── src/                          # RTL
-│   ├── alu_4bit.v                # 74181-style 4-bit ALU — logic & arithmetic
-│   └── tt_um_alu4_sma.v          # TinyTapeout tt_um IO wrapper
-├── openlane/                     # OpenLane flow (ASAP7)
-│   ├── config.tcl                # ASAP7 7.5T RVT config, 1 GHz target
-│   ├── constraints.sdc           # SDC timing constraints
-│   └── integration.py            # Python→OpenLane bridge (DEF gen, metrics)
-├── tinytapeout/                  # TinyTapeout helpers
-│   └── integration.py            # info.yaml validator + 256-byte ROM builder
-├── visuals/                      # Generated PNG outputs (committed)
-│   ├── chip_layout_s27.png
-│   ├── chip_layout_s344.png
-│   ├── chip_layout_s1196.png
-│   ├── convergence.png
-│   └── hpwl_comparison.png
-├── Dockerfile                    # Multi-stage: sma-base + openlane-runner
-├── docker-compose.yml            # Services: sma · rom-builder · openlane
-├── info.yaml                     # TinyTapeout project metadata
-└── main.py                       # CLI orchestrator
+├── benchmarks/
+│   ├── shared.py          # Circuit dataclass, grid sizing, net generator
+│   ├── iscas85.py         # 11 ISCAS '85 combinational circuits
+│   └── iscas89.py         # 28 ISCAS '89 sequential circuits
+├── sma/
+│   ├── metrics.py         # Vectorised HPWL (numpy.reduceat) + adaptive params
+│   └── placement.py       # SMA: PreparedNets, adaptive agents/iters
+├── visualize/
+│   ├── chip_layout.py     # DIE area renderer (cells, rails, net bboxes)
+│   ├── convergence.py     # Convergence + HPWL bar chart
+│   └── results_table.py   # Full benchmark results table PNG
+├── src/                   # RTL: alu_4bit.v, tt_um_alu4_sma.v
+├── openlane/              # ASAP7 config.tcl, constraints.sdc, DEF bridge
+├── tinytapeout/           # info.yaml validator + 256-byte ROM builder
+├── visuals/               # Generated PNGs (all committed)
+├── Dockerfile             # sma-base + openlane-runner stages
+├── docker-compose.yml     # sma / rom-builder / openlane services
+├── main.py                # CLI: --all-iscas, --save-visuals, etc.
+└── info.yaml              # TinyTapeout project metadata
 ```
 
 ---
 
 ## Quick Start
 
-### Native Python
-
 ```bash
 pip install -r requirements.txt
 
-# Single circuit (default: s27)
-python main.py
+# Run all 39 ISCAS circuits and generate all visuals
+python main.py --all-iscas --save-visuals
 
-# All ISCAS'89 circuits + save visuals
-python main.py --all-circuits --save-visuals
+# Single circuit
+python main.py --circuit c880
 
-# Export OpenLane DEF hint + TinyTapeout ROM
-python main.py --export-def --export-rom
-
-# Validate info.yaml
-python main.py --validate
-```
-
-### Docker
-
-```bash
-# Build and run — generates all visuals into ./visuals/
+# Docker
 docker compose up sma
-
-# TinyTapeout ROM only
-docker compose run rom-builder
-
-# Full OpenLane RTL→GDSII (requires efabless/openlane image)
-docker compose --profile full-flow up openlane
 ```
-
----
-
-## ISCAS '89 Benchmark Circuits
-
-Statistics from: *F. Brglez, D. Bryan, K. Kozminski, "Combinational Profiles of
-Sequential Benchmark Circuits", ISCAS 1989.*
-
-| Circuit | Gates | FFs | PIs | POs | Total Cells | Nets | Die (ASAP7)       |
-|---------|------:|----:|----:|----:|------------:|-----:|-------------------|
-| s27     |    10 |   3 |   7 |   4 |          24 |   22 | 16.2 × 16.2 µm²  |
-| s344    |   160 |  15 |   9 |  11 |         195 |  178 | 32.4 × 32.4 µm²  |
-| s1196   |   547 |  18 |  14 |  14 |         593 |  574 | 54.0 × 54.0 µm²  |
-
----
-
-## ASAP7 PDK
-
-| Parameter          | Value                        |
-|--------------------|------------------------------|
-| Technology node    | 7 nm predictive (ASU)        |
-| Standard cell lib  | `asap7sc7p5t_SIMPLE_RVT_TYP` |
-| Row height         | 1.08 µm (7.5-track)          |
-| Site width         | 0.216 µm                     |
-| Target clock       | 1 GHz (1.0 ns period)        |
-| Core utilisation   | 50 %                         |
 
 ---
 
 ## SMA Algorithm
 
-Each agent encodes all cell grid coordinates:
-```
-agent = [x₀, y₀,  x₁, y₁,  …,  x_{n−1}, y_{n−1}]   (integer grid units)
-```
+**Agent:** `[x₀,y₀, x₁,y₁, …, x_{n−1},y_{n−1}]`  (integer grid coords)
 
-**Fitness = HPWL + constraint penalty**
+**Fitness = vectorised HPWL + constraint penalty**
 
 ```
-HPWL = Σ_nets  (max_x − min_x) + (max_y − min_y)
-
-Overlap penalty (n ≤ 120): 1000 × Σ_{i<j} max(0, 1−|Δx|) × max(0, 1−|Δy|)
-Density penalty (n > 120): 80 × Σ_bins  max(0, density − 2.2×target)²
+HPWL  = Σ_nets  (max_x − min_x) + (max_y − min_y)          ← numpy.reduceat, O(k pins)
+Penalty (n ≤ 120): 1000 × pairwise overlap area              ← O(n²)
+Penalty (n > 120): 80 × Σ_bins (density − 2.2·target)²      ← O(n)  histogram
 ```
 
-**SMA update rule per agent per iteration:**
+**Adaptive token budget** — keeps ≤ 1 500 agent-iterations regardless of circuit size:
+
+| Circuit size  | Agents | Iters | Budget |
+|---------------|-------:|------:|-------:|
+| ≤ 100 cells   |     15 |   100 |  1 500 |
+| ≤ 500 cells   |     12 |    60 |    720 |
+| ≤ 2 000 cells |     10 |    40 |    400 |
+| ≤ 10 000 cells|      8 |    25 |    200 |
+| > 10 000 cells|      5 |    15 |     75 |
+
+**SMA update per agent:**
 ```python
 if r < tanh(|fit_i − fit_best|):
-    X_new = X_best + vb × (W × X_A − X_B)    # exploitation
+    X_new = X_best + vb × (W × X_A − X_B)   # exploitation
 else:
-    X_new = uniform_random(grid)               # exploration
+    X_new = uniform_random(grid)              # exploration
 
-vb = arctanh(1 − t/T) × (2r − 1)             # adaptive oscillation
-W  = 1 + r × log((fit_min − fit_i) / range + 1)  # slime weight
+vb = arctanh(1 − t/T) × (2r − 1)            # adaptive oscillation
+W  = 1 + r · log((fit_min − fit_i)/range + 1)  # slime weight
 ```
+
+---
+
+## ASAP7 PDK
+
+| Parameter       | Value                        |
+|-----------------|------------------------------|
+| Technology      | 7 nm predictive (ASU)        |
+| Cell library    | `asap7sc7p5t_SIMPLE_RVT_TYP` |
+| Row height      | **1.08 µm** (7.5-track)      |
+| Site width      | 0.216 µm                     |
+| Target clock    | 1 GHz                        |
+| Core utilisation| 50 %                         |
+
+---
+
+## ISCAS Benchmark Statistics
+
+| Suite     | Circuits | Cell range     | Net range      | Die range (µm²)     |
+|-----------|:--------:|---------------:|---------------:|--------------------:|
+| ISCAS '85 |       11 | 13 – 3 827     | 11 – 3 719     | 10.8² – 97.2²       |
+| ISCAS '89 |       28 | 24 – 23 949    | 13 – 23 815    | 10.8² – 243.0²      |
+| **Total** |   **39** | **13 – 23 949**| **11 – 23 815**| **10.8² – 243.0²** |
 
 ---
 
 ## OpenLane Integration
 
-`python main.py --export-def` generates `openlane/floorplan_hint.def` with
-SMA-derived cell positions in nm-scale DEF coordinates (1 ASAP7 grid unit →
-1.08 µm = 1080 DEF units).
-
-Run the full RTL→GDSII flow:
 ```bash
+# Generate ASAP7 DEF floorplan hint from SMA result
+python main.py --circuit c880 --export-def
+
+# Run OpenLane RTL→GDSII (requires Docker)
 docker run --rm -v $(pwd):/work efabless/openlane:latest \
     bash -c "cd /work && flow.tcl -design openlane -tag sma_run -overwrite"
 ```
 
-Results land in `openlane/runs/sma_run/`.
-
----
-
 ## TinyTapeout ROM
 
-`python main.py --export-rom` produces `tt_chip_rom.bin` — a 256-byte ROM
-following the [tt-chip-rom](https://github.com/TinyTapeout/tt-chip-rom) layout:
-
-| Address  | Content                              |
-|----------|--------------------------------------|
-| 0 – 7    | Shuttle name (7-segment encoded)     |
-| 8 – 31   | Git commit hash (7-segment encoded)  |
-| 32 – 127 | Chip descriptor (ASCII, 96 bytes)    |
-| 248 – 251| Magic value `0xDEADBEEF`             |
-| 252 – 255| CRC32 checksum (little-endian)       |
-
----
-
-## Pin Map (tt_um wrapper)
-
-| Port       | Bits   | Signal                    |
-|------------|--------|---------------------------|
-| `ui_in`    | [3:0]  | ALU operand A             |
-| `ui_in`    | [7:4]  | ALU operand B             |
-| `uio_in`   | [3:0]  | Function select S         |
-| `uio_in`   | [4]    | Mode M (0=arith, 1=logic) |
-| `uio_in`   | [5]    | Carry-in CIN              |
-| `uo_out`   | [3:0]  | Result F                  |
-| `uo_out`   | [4]    | Carry-out COUT            |
-| `uo_out`   | [5]    | Group propagate P         |
-| `uo_out`   | [6]    | Group generate G          |
+```bash
+python main.py --export-rom   # → tt_chip_rom.bin  (256 bytes, CRC32 verified)
+```

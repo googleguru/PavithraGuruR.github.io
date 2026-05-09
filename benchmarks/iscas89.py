@@ -1,136 +1,74 @@
 """
-ISCAS '89 sequential benchmark circuit models.
-Statistics from: F. Brglez, D. Bryan, K. Kozminski,
+ISCAS '89 sequential benchmark circuits — all 28 standard circuits.
+Counts from: F. Brglez, D. Bryan, K. Kozminski,
 "Combinational Profiles of Sequential Benchmark Circuits", ISCAS 1989.
-
-Cell counts and net topologies are accurate per published benchmark specs.
-Connectivity uses a weighted-random model matching typical ISCAS '89 fanout
-distributions (geometric mean fanout ~2.5, average fanin ~2.1).
 """
 from __future__ import annotations
 import numpy as np
-from dataclasses import dataclass, field
+from .shared import Circuit, _gate_seq, _gen_nets, _grid
 
-ASAP7_ROW_H: float = 1.08   # µm per grid unit — ASAP7 7.5-track row height
-ASAP7_SITE_W: float = 0.216  # µm per site width
-
-# Gate-type distribution matching ISCAS '89 benchmarks
-_GTYPES  = ['NAND', 'NOR',  'AND',  'OR',   'NOT',  'XOR',  'BUF']
-_WEIGHTS = [0.30,   0.25,   0.15,   0.10,   0.10,   0.05,   0.05]
-
-
-@dataclass
-class Circuit:
-    name:    str
-    n_pi:    int
-    n_po:    int
-    n_ff:    int
-    n_gates: int
-    cells:   list[dict]   # [{'name', 'type', 'idx'}, ...]
-    nets:    list[dict]   # [{'name', 'cell_idxs': [...]}, ...]
-    grid_w:  int          # placement grid width  (units of ASAP7_ROW_H)
-    grid_h:  int          # placement grid height (units of ASAP7_ROW_H)
-
-    @property
-    def n_cells(self) -> int:
-        return len(self.cells)
-
-    @property
-    def die_um(self) -> tuple[float, float]:
-        return self.grid_w * ASAP7_ROW_H, self.grid_h * ASAP7_ROW_H
-
-    def summary(self) -> str:
-        w, h = self.die_um
-        return (f"{self.name}: {self.n_cells} cells ({self.n_ff} FF, "
-                f"{self.n_gates} gates, {self.n_pi} PI, {self.n_po} PO)  "
-                f"nets={len(self.nets)}  die={w:.1f}×{h:.1f} µm  "
-                f"grid={self.grid_w}×{self.grid_h}")
+# (n_gates, n_ff, n_pi, n_po)
+_C89: dict[str, tuple[int, int, int, int]] = {
+    "s27":    (   10,    3,   7,   4),
+    "s208":   (  104,    8,  11,   2),
+    "s298":   (  119,   14,   3,   6),
+    "s344":   (  160,   15,   9,  11),
+    "s349":   (  161,   15,   9,  11),
+    "s382":   (  158,   21,   3,   6),
+    "s400":   (  163,   21,   3,   6),
+    "s420":   (  197,   16,  19,   2),
+    "s444":   (  181,   21,   3,   6),
+    "s510":   (  211,    6,  19,   7),
+    "s526":   (  193,   21,   3,   7),
+    "s641":   (  379,   19,  35,  24),
+    "s713":   (  393,   19,  35,  23),
+    "s820":   (  289,    5,  18,  19),
+    "s832":   (  287,    5,  18,  19),
+    "s953":   (  424,   29,  16,  23),
+    "s1196":  (  547,   18,  14,  14),
+    "s1238":  (  508,   18,  14,  14),
+    "s1423":  (  657,   74,  17,   5),
+    "s1488":  (  653,    6,   8,  19),
+    "s1494":  (  647,    6,   8,  19),
+    "s5378":  ( 2779,  179,  35,  49),
+    "s9234":  ( 5597,  228,  36,  39),
+    "s13207": ( 7951,  669,  62, 152),
+    "s15850": ( 9772,  597,  77, 150),
+    "s35932": (16065, 1728,  35, 320),
+    "s38417": (22179, 1636,  28, 106),
+    "s38584": (19253, 1452,  12, 278),
+}
 
 
-def _gate_seq(n: int, rng: np.random.Generator) -> list[str]:
-    return rng.choice(_GTYPES, size=n, p=_WEIGHTS).tolist()
-
-
-def _gen_nets(cells: list[dict], n_nets: int,
-              rng: np.random.Generator) -> list[dict]:
-    """
-    Generate n_nets with realistic ISCAS '89 connectivity.
-    Fanout follows geometric distribution (p=0.45, mean ~1.2 extra loads).
-    Each net has 1 driver + 1–4 loads, drawn uniformly from all cells.
-    """
-    n = len(cells)
-    nets: list[dict] = []
-    for i in range(n_nets):
-        driver   = int(rng.integers(0, n))
-        n_loads  = min(4, 1 + int(rng.geometric(0.45)))
-        loads    = rng.integers(0, n, size=n_loads).tolist()
-        idxs     = list(dict.fromkeys([driver] + loads))  # deduplicated, order-stable
-        nets.append({"name": f"net{i}", "cell_idxs": idxs})
-    return nets
-
-
-# ── s27 ──────────────────────────────────────────────────────────────────────
-# Exact published counts: 10 gates, 3 FFs, 7 PIs, 4 POs → 24 total cells
-# 22 nets.  Grid: 15×15 = 16.2 µm × 16.2 µm at ASAP7.
-def build_s27(seed: int = 0) -> Circuit:
+def _build89(name: str, n_gates: int, n_ff: int, n_pi: int, n_po: int,
+             seed: int) -> Circuit:
+    rng   = np.random.default_rng(seed)
     cells: list[dict] = []
-    for i in range(7):
-        cells.append({"name": f"PI{i}", "type": "PI",   "idx": len(cells)})
-    for i, t in enumerate(["NAND", "NAND", "OR", "AND", "NAND", "NOT", "AND", "NOT", "NOT", "BUF"]):
-        cells.append({"name": f"G{i}",  "type": t,     "idx": len(cells)})
-    for i in range(3):
-        cells.append({"name": f"FF{i}", "type": "FF",   "idx": len(cells)})
-    for i in range(4):
-        cells.append({"name": f"PO{i}", "type": "PO",   "idx": len(cells)})
-
-    rng  = np.random.default_rng(seed)
-    nets = _gen_nets(cells, 22, rng)
-    return Circuit(name="s27", n_pi=7, n_po=4, n_ff=3, n_gates=10,
-                   cells=cells, nets=nets, grid_w=15, grid_h=15)
-
-
-# ── s344 ─────────────────────────────────────────────────────────────────────
-# Published counts: 160 gates, 15 FFs, 9 PIs, 11 POs → 195 total cells
-# 178 nets.  Grid: 30×30 = 32.4 µm × 32.4 µm at ASAP7.
-def build_s344(seed: int = 1) -> Circuit:
-    cells: list[dict] = []
-    rng = np.random.default_rng(seed)
-    for i in range(9):
+    for i in range(n_pi):
         cells.append({"name": f"PI{i}",  "type": "PI",  "idx": len(cells)})
-    for i, t in enumerate(_gate_seq(160, rng)):
+    for i, t in enumerate(_gate_seq(n_gates, rng)):
         cells.append({"name": f"G{i}",   "type": t,     "idx": len(cells)})
-    for i in range(15):
+    for i in range(n_ff):
         cells.append({"name": f"FF{i}",  "type": "FF",  "idx": len(cells)})
-    for i in range(11):
+    for i in range(n_po):
         cells.append({"name": f"PO{i}",  "type": "PO",  "idx": len(cells)})
 
-    nets = _gen_nets(cells, 178, rng)
-    return Circuit(name="s344", n_pi=9, n_po=11, n_ff=15, n_gates=160,
-                   cells=cells, nets=nets, grid_w=30, grid_h=30)
+    n_nets = max(1, n_gates + n_ff)
+    nets   = _gen_nets(cells, n_nets, rng)
+    gw, gh = _grid(len(cells))
+    return Circuit(name=name, n_pi=n_pi, n_po=n_po, n_ff=n_ff,
+                   n_gates=n_gates, cells=cells, nets=nets,
+                   grid_w=gw, grid_h=gh, series="ISCAS'89")
 
 
-# ── s1196 ─────────────────────────────────────────────────────────────────────
-# Published counts: 547 gates, 18 FFs, 14 PIs, 14 POs → 593 total cells
-# 574 nets.  Grid: 50×50 = 54.0 µm × 54.0 µm at ASAP7.
-def build_s1196(seed: int = 2) -> Circuit:
-    cells: list[dict] = []
-    rng = np.random.default_rng(seed)
-    for i in range(14):
-        cells.append({"name": f"PI{i}",  "type": "PI",  "idx": len(cells)})
-    for i, t in enumerate(_gate_seq(547, rng)):
-        cells.append({"name": f"G{i}",   "type": t,     "idx": len(cells)})
-    for i in range(18):
-        cells.append({"name": f"FF{i}",  "type": "FF",  "idx": len(cells)})
-    for i in range(14):
-        cells.append({"name": f"PO{i}",  "type": "PO",  "idx": len(cells)})
-
-    nets = _gen_nets(cells, 574, rng)
-    return Circuit(name="s1196", n_pi=14, n_po=14, n_ff=18, n_gates=547,
-                   cells=cells, nets=nets, grid_w=50, grid_h=50)
+def _factory(name: str, seed: int):
+    def build() -> Circuit:
+        ng, nf, ni, no = _C89[name]
+        return _build89(name, ng, nf, ni, no, seed)
+    build.__name__ = name
+    return build
 
 
-CIRCUITS: dict[str, callable] = {
-    "s27":   build_s27,
-    "s344":  build_s344,
-    "s1196": build_s1196,
+CIRCUITS_89: dict[str, callable] = {
+    name: _factory(name, i) for i, name in enumerate(_C89)
 }

@@ -1,183 +1,187 @@
 #!/usr/bin/env python3
 """
-SMA global placement for ISCAS '89 benchmark circuits on ASAP7 7nm PDK.
-Integrates with OpenLane RTL→GDSII and TinyTapeout ROM flows.
+SMA global placement — ISCAS'85 + ISCAS'89 complete benchmark suite, ASAP7 7nm.
 
 Usage:
-    python main.py                                  # s27, no visuals
-    python main.py --circuit s344                   # specific circuit
-    python main.py --all-circuits --save-visuals    # full benchmark suite + PNGs
-    python main.py --export-def                     # write OpenLane DEF hint
-    python main.py --export-rom                     # write TinyTapeout ROM
-    python main.py --validate                       # validate info.yaml
-    python main.py --run-openlane                   # trigger OpenLane Docker flow
+    python main.py --all-iscas               # run all 39 circuits + save table
+    python main.py --circuit s344            # single circuit
+    python main.py --all-circuits            # ISCAS'89 only (s27/s344/s1196)
+    python main.py --save-visuals            # also generate chip-layout PNGs
+    python main.py --export-def              # OpenLane DEF hint (last circuit)
+    python main.py --export-rom              # TinyTapeout ROM image
+    python main.py --validate                # validate info.yaml
 """
 from __future__ import annotations
-import argparse
-import sys
-import time
+import argparse, time, sys
 from pathlib import Path
 
-from benchmarks import CIRCUITS, Circuit
-from sma import SMA, hpwl as calc_hpwl
+import numpy as np
+from benchmarks import CIRCUITS, CIRCUITS_85, CIRCUITS_89
+from sma import SMA, hpwl as calc_hpwl, prepare_nets, sma_params
 
 
-def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        description="SMA placement · ISCAS'89 · ASAP7 · OpenLane · TinyTapeout"
-    )
-    p.add_argument("--circuit",       default="s27",
-                   choices=list(CIRCUITS.keys()),
-                   help="Single benchmark circuit to place")
-    p.add_argument("--all-circuits",  action="store_true",
-                   help="Run SMA on all ISCAS'89 circuits (s27, s344, s1196)")
-    p.add_argument("--n-agents",      type=int, default=15)
-    p.add_argument("--max-iter",      type=int, default=100)
-    p.add_argument("--seed",          type=int, default=42)
-    p.add_argument("--save-visuals",  action="store_true",
-                   help="Save chip layout, convergence, and HPWL plots to visuals/")
-    p.add_argument("--export-def",    action="store_true",
-                   help="Write OpenLane floorplan DEF hint")
-    p.add_argument("--export-rom",    action="store_true",
-                   help="Write TinyTapeout 256-byte ROM image")
-    p.add_argument("--validate",      action="store_true",
-                   help="Validate info.yaml against TinyTapeout schema")
-    p.add_argument("--run-openlane",  action="store_true",
-                   help="Run OpenLane Docker flow (requires Docker)")
-    return p.parse_args()
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _rand_hpwl(circuit, pnets, seed=42) -> float:
+    rng = np.random.default_rng(seed)
+    n   = circuit.n_cells
+    xs  = rng.integers(0, circuit.grid_w, n).astype(float)
+    ys  = rng.integers(0, circuit.grid_h, n).astype(float)
+    a   = np.stack([xs, ys], axis=1).reshape(n * 2)
+    return calc_hpwl(a, pnets)
 
 
-# ── per-circuit SMA run ───────────────────────────────────────────────────────
+def run_one(circuit, seed: int = 42, verbose: bool = True) -> dict:
+    pnets             = prepare_nets(circuit.cells, circuit.nets)
+    n_agents, max_iter = sma_params(circuit.n_cells)
+    sma               = SMA(n_agents=n_agents, max_iter=max_iter, seed=seed)
+    init_h            = _rand_hpwl(circuit, pnets, seed)
 
-def run_circuit(circuit: Circuit, args: argparse.Namespace) -> dict:
-    print(f"\n{'='*62}")
-    print(f"  {circuit.summary()}")
-    print(f"{'='*62}")
+    t0               = time.perf_counter()
+    best_agent, bfit = sma.run(pnets, circuit.grid_w, circuit.grid_h)
+    elapsed          = time.perf_counter() - t0
 
-    sma = SMA(n_agents=args.n_agents, max_iter=args.max_iter, seed=args.seed)
+    sma_h   = calc_hpwl(best_agent, pnets)
+    improve = (init_h - sma_h) / (init_h + 1e-9) * 100.0
+    dw, dh  = circuit.die_um
 
-    # Random-initial HPWL baseline (average of initial pop)
-    import numpy as np
-    rng = np.random.default_rng(args.seed)
-    xs  = rng.integers(0, circuit.grid_w, circuit.n_cells).astype(float)
-    ys  = rng.integers(0, circuit.grid_h, circuit.n_cells).astype(float)
-    rand_agent = np.stack([xs, ys], axis=1).reshape(circuit.n_cells * 2)
-    init_hpwl  = calc_hpwl(rand_agent, circuit.nets)
-
-    t0 = time.perf_counter()
-    best_agent, best_fit = sma.run(circuit.cells, circuit.nets,
-                                   circuit.grid_w, circuit.grid_h)
-    elapsed = time.perf_counter() - t0
-
-    placement = sma.placement_map(circuit.cells)
-    raw_hpwl  = calc_hpwl(best_agent, circuit.nets)
-    improve   = (init_hpwl - raw_hpwl) / (init_hpwl + 1e-9) * 100.0
-
-    print(f"  Runtime    : {elapsed:.2f} s")
-    print(f"  Init HPWL  : {init_hpwl:.2f}")
-    print(f"  Best HPWL  : {raw_hpwl:.2f}  (fitness={best_fit:.2f})")
-    print(f"  Improvement: {improve:.1f}%")
-    print(f"\n  Final placement (top-10 shown):")
-    for p in placement[:10]:
-        print(f"    {p['name']:<12} {p['type']:<5} "
-              f"x={p['x']:>3}  y={p['y']:>3}  "
-              f"({p['x_um']:.2f}, {p['y_um']:.2f}) µm")
-    if len(placement) > 10:
-        print(f"    … {len(placement)-10} more cells …")
+    if verbose:
+        print(f"  {circuit.series:<10} {circuit.name:<8} "
+              f"cells={circuit.n_cells:>6,}  nets={circuit.n_nets:>6,}  "
+              f"grid={circuit.grid_w:>3}x{circuit.grid_h:<3}  "
+              f"die={dw:.1f}x{dh:.1f}µm  "
+              f"agents={n_agents:>2} iter={max_iter:>3}  "
+              f"init={init_h:>10.1f}  sma={sma_h:>10.1f}  "
+              f"Δ={improve:>6.1f}%  t={elapsed:.1f}s")
 
     return {
-        "circuit":     circuit,
-        "placement":   placement,
-        "sma":         sma,
-        "best_agent":  best_agent,
-        "init_hpwl":   init_hpwl,
-        "sma_hpwl":    raw_hpwl,
+        "circuit": circuit.name, "series": circuit.series,
+        "n_cells": circuit.n_cells, "n_nets": circuit.n_nets,
+        "grid":    f"{circuit.grid_w}×{circuit.grid_h}",
+        "die":     f"{dw:.1f}×{dh:.1f}",
+        "init_hpwl": init_h, "sma_hpwl": sma_h,
         "improvement": improve,
+        "n_agents": n_agents, "max_iter": max_iter,
+        "runtime": elapsed,
+        "_sma": sma, "_agent": best_agent, "_circuit": circuit,
     }
+
+
+def print_table(results: list[dict]) -> None:
+    hdr = (f"{'Circuit':<9} {'Series':<10} {'Cells':>7} {'Nets':>7} "
+           f"{'Grid':<8} {'Die (µm)':<14} "
+           f"{'Init HPWL':>12} {'SMA HPWL':>12} {'Δ%':>7} "
+           f"{'Ag':>3} {'It':>3} {'t(s)':>6}")
+    sep = "─" * len(hdr)
+    print(f"\n{sep}\n{hdr}\n{sep}")
+    prev_series = None
+    for r in results:
+        if r["series"] != prev_series:
+            if prev_series is not None:
+                print(sep)
+            prev_series = r["series"]
+        print(f"{r['circuit']:<9} {r['series']:<10} "
+              f"{r['n_cells']:>7,} {r['n_nets']:>7,} "
+              f"{r['grid']:<8} {r['die']:<14} "
+              f"{r['init_hpwl']:>12.1f} {r['sma_hpwl']:>12.1f} "
+              f"{r['improvement']:>7.1f} "
+              f"{r['n_agents']:>3} {r['max_iter']:>3} {r['runtime']:>6.1f}")
+    print(sep)
 
 
 # ── main ─────────────────────────────────────────────────────────────────────
 
-def main() -> None:
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--all-iscas",    action="store_true",
+                   help="Run all 39 ISCAS'85 + ISCAS'89 circuits")
+    p.add_argument("--all-circuits", action="store_true",
+                   help="Run s27, s344, s1196 (legacy mode)")
+    p.add_argument("--circuit",      default="s27", choices=list(CIRCUITS.keys()))
+    p.add_argument("--seed",         type=int, default=42)
+    p.add_argument("--save-visuals", action="store_true")
+    p.add_argument("--export-def",   action="store_true")
+    p.add_argument("--export-rom",   action="store_true")
+    p.add_argument("--validate",     action="store_true")
+    return p.parse_args()
+
+
+def main():
     args = parse_args()
 
-    # ── info.yaml validation ──────────────────────────────────────────────────
     if args.validate:
         from tinytapeout import validate_info
         errs = validate_info()
-        if errs:
-            print("[VALIDATE] ERRORS:")
-            for e in errs:
-                print(f"  • {e}")
-        else:
-            print("[VALIDATE] info.yaml OK")
+        print("[VALIDATE]", "OK" if not errs else "\n".join(f"  • {e}" for e in errs))
 
-    # ── select circuits to run ────────────────────────────────────────────────
-    circuit_names = list(CIRCUITS.keys()) if args.all_circuits else [args.circuit]
-    results: dict[str, dict] = {}
+    # ── select circuits ───────────────────────────────────────────────────────
+    if args.all_iscas:
+        names = list(CIRCUITS_85.keys()) + list(CIRCUITS_89.keys())
+    elif args.all_circuits:
+        names = ["s27", "s344", "s1196"]
+    else:
+        names = [args.circuit]
 
-    for name in circuit_names:
-        circuit = CIRCUITS[name]()
-        results[name] = run_circuit(circuit, args)
+    print(f"\nRunning SMA on {len(names)} circuit(s)  |  ASAP7 7nm  |  seed={args.seed}\n")
+    header = (f"{'Circuit':<9} {'Series':<10} {'Cells':>7} {'Nets':>7} "
+              f"{'Grid':<8} {'Die (µm)':<14} "
+              f"{'Init HPWL':>12} {'SMA HPWL':>12} {'Δ%':>7} "
+              f"{'Ag':>3} {'It':>3} {'t(s)':>6}")
+    print(header)
+    print("─" * len(header))
 
-    # ── save visuals ──────────────────────────────────────────────────────────
+    results = []
+    for name in names:
+        c = CIRCUITS[name]()
+        results.append(run_one(c, seed=args.seed, verbose=True))
+
+    # ── summary table ────────────────────────────────────────────────────────
+    print_table(results)
+    total_t  = sum(r["runtime"] for r in results)
+    mean_imp = np.mean([r["improvement"] for r in results])
+    print(f"\nTotal runtime: {total_t:.1f}s   Mean improvement: {mean_imp:.1f}%\n")
+
+    # ── visuals ───────────────────────────────────────────────────────────────
     if args.save_visuals:
-        try:
-            from visualize import plot_chip_layout, plot_convergence, plot_hpwl_comparison
-        except ImportError as exc:
-            print(f"[WARN] matplotlib not available — skipping visuals ({exc})")
-        else:
-            vis_dir = Path("visuals")
+        from visualize import (plot_chip_layout, plot_convergence,
+                               plot_hpwl_comparison, plot_results_table)
+        vis = Path("visuals")
 
-            # 1. Chip layout per circuit
-            for name, r in results.items():
-                c = r["circuit"]
-                plot_chip_layout(
-                    placement=r["placement"],
-                    nets=c.nets,
-                    grid_w=c.grid_w,
-                    grid_h=c.grid_h,
-                    circuit_name=name,
-                    hpwl_val=r["sma_hpwl"],
-                    out_dir=vis_dir,
-                )
+        # Chip layouts (only for circuits ≤ 2000 cells — larger ones are too dense)
+        for r in results:
+            c = r["_circuit"]
+            if c.n_cells <= 2000:
+                plot_chip_layout(r["_sma"].placement_map(c.cells), c.nets,
+                                 c.grid_w, c.grid_h, c.name, r["sma_hpwl"],
+                                 out_dir=vis)
 
-            # 2. Convergence (all circuits in one plot)
-            histories = {n: r["sma"].history for n, r in results.items()}
-            plot_convergence(histories, out_dir=vis_dir)
+        # Convergence (selected circuits for readability)
+        selected = {r["circuit"]: r["_sma"].history for r in results
+                    if r["circuit"] in ("c17", "c880", "c7552",
+                                        "s27", "s344", "s1196", "s5378")}
+        if selected:
+            plot_convergence(selected, out_dir=vis)
 
-            # 3. HPWL comparison bar chart
-            cmp = {
-                n: {
-                    "initial":     r["init_hpwl"],
-                    "sma":         r["sma_hpwl"],
-                    "improvement": r["improvement"],
-                }
-                for n, r in results.items()
-            }
-            plot_hpwl_comparison(cmp, out_dir=vis_dir)
+        # HPWL bar — all circuits grouped
+        cmp = {r["circuit"]: {"initial": r["init_hpwl"],
+                               "sma":     r["sma_hpwl"],
+                               "improvement": r["improvement"]}
+               for r in results}
+        plot_hpwl_comparison(cmp, out_dir=vis)
 
-            print(f"\n[Visual] All plots saved to {vis_dir.resolve()}/")
+        # Results table PNG
+        plot_results_table(results, out_dir=vis)
 
-    # ── OpenLane DEF export (use last/only circuit) ───────────────────────────
+    # ── OpenLane / TinyTapeout exports ────────────────────────────────────────
     if args.export_def and results:
         from openlane.integration import placement_to_def
-        last = list(results.values())[-1]
-        c    = last["circuit"]
-        def_path = Path("openlane") / "floorplan_hint.def"
-        placement_to_def(last["placement"], def_path)
+        r = results[-1]
+        placement_to_def(r["_sma"].placement_map(r["_circuit"].cells),
+                         Path("openlane/floorplan_hint.def"))
 
-    # ── TinyTapeout ROM ───────────────────────────────────────────────────────
     if args.export_rom:
         from tinytapeout import write_rom
         write_rom()
-
-    # ── OpenLane full flow ────────────────────────────────────────────────────
-    if args.run_openlane:
-        from openlane.integration import run_flow, print_metrics
-        print("\n[OpenLane] Starting RTL→GDSII flow (ASAP7) …")
-        metrics = run_flow(tag="sma_run")
-        print_metrics(metrics)
 
 
 if __name__ == "__main__":

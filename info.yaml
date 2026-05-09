@@ -1,0 +1,52 @@
+# TinyTapeout submission — tt_um_alu4_sma
+# https://tinytapeout.com
+
+project:
+  title:       "4-bit ALU with SMA-optimised global placement"
+  author:      "R.Pavithra Guru"
+  description: >
+    A 74181-style 4-bit ALU (A_in, B_in, ALU_core, F_out) whose standard-cell
+    global placement is optimised by the Slime Mould Algorithm (SMA) minimising
+    total HPWL before the OpenLane RTL-to-GDSII flow.
+  language:    "Verilog"
+  tiles:       "1x2"
+
+pinout:
+  ui_in:
+    - { pin: 0, name: "A[0]",  description: "ALU operand A bit 0" }
+    - { pin: 1, name: "A[1]",  description: "ALU operand A bit 1" }
+    - { pin: 2, name: "A[2]",  description: "ALU operand A bit 2" }
+    - { pin: 3, name: "A[3]",  description: "ALU operand A bit 3" }
+    - { pin: 4, name: "B[0]",  description: "ALU operand B bit 0" }
+    - { pin: 5, name: "B[1]",  description: "ALU operand B bit 1" }
+    - { pin: 6, name: "B[2]",  description: "ALU operand B bit 2" }
+    - { pin: 7, name: "B[3]",  description: "ALU operand B bit 3" }
+
+  uo_out:
+    - { pin: 0, name: "F[0]",  description: "Result bit 0" }
+    - { pin: 1, name: "F[1]",  description: "Result bit 1" }
+    - { pin: 2, name: "F[2]",  description: "Result bit 2" }
+    - { pin: 3, name: "F[3]",  description: "Result bit 3" }
+    - { pin: 4, name: "COUT",  description: "Carry out" }
+    - { pin: 5, name: "P",     description: "Group propagate" }
+    - { pin: 6, name: "G",     description: "Group generate" }
+    - { pin: 7, name: "",      description: "unused" }
+
+  uio_in:
+    - { pin: 0, name: "S[0]",  description: "Function select bit 0" }
+    - { pin: 1, name: "S[1]",  description: "Function select bit 1" }
+    - { pin: 2, name: "S[2]",  description: "Function select bit 2" }
+    - { pin: 3, name: "S[3]",  description: "Function select bit 3" }
+    - { pin: 4, name: "M",     description: "Mode: 0=arithmetic 1=logic" }
+    - { pin: 5, name: "CIN",   description: "Carry in" }
+    - { pin: 6, name: "",      description: "unused" }
+    - { pin: 7, name: "",      description: "unused" }
+
+how_to_test: >
+  Apply A and B on ui_in, set S and M via uio_in, hold ena high.
+  Read F[3:0] and COUT from uo_out.  For arithmetic add: S=0b0001, M=0.
+
+# ROM metadata for tt-chip-rom (tt-support-tools compatible)
+rom:
+  shuttle_name: "tt_alu4_sma"
+  chip_descriptor: "4b-ALU SMA-placed sky130 OpenLane"

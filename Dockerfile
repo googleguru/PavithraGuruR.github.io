@@ -1,41 +1,54 @@
-FROM ruby:latest
-ENV DEBIAN_FRONTEND noninteractive
+# ── Stage 1: SMA placement engine + visualiser ───────────────────────────────
+FROM python:3.11-slim AS sma-base
 
-Label MAINTAINER Amir Pourmand
+LABEL org.opencontainers.image.title="tt_um_alu4_sma"
+LABEL org.opencontainers.image.description=\
+      "SMA global placement for ISCAS'89 benchmarks on ASAP7 PDK"
+LABEL org.opencontainers.image.source=\
+      "https://github.com/PavithraGuruR/PavithraGuruR.github.io"
 
-RUN apt-get update -y && apt-get install -y --no-install-recommends \
-    locales \
-    imagemagick \
-    build-essential \
-    zlib1g-dev \
-    jupyter-nbconvert \
-    inotify-tools procps && \
-    apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    MPLBACKEND=Agg
+
+WORKDIR /app
+
+# System libs for matplotlib (font rendering, PNG)
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends \
+        libfreetype6 libpng16-16 fonts-dejavu-core \
+        && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy project source
+COPY benchmarks/ ./benchmarks/
+COPY sma/        ./sma/
+COPY visualize/  ./visualize/
+COPY openlane/   ./openlane/
+COPY tinytapeout/ ./tinytapeout/
+COPY src/        ./src/
+COPY main.py info.yaml ./
+
+# Pre-create output directories
+RUN mkdir -p visuals openlane/runs
+
+# ── Default entry: run all circuits and generate all visuals ──────────────────
+ENTRYPOINT ["python", "main.py"]
+CMD ["--all-circuits", "--save-visuals", "--validate"]
 
 
-RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
-    locale-gen
+# ── Stage 2: OpenLane RTL→GDSII (add on top of sma-base) ────────────────────
+# Build with: docker build --target openlane-runner -t alu4-openlane .
+# Requires network access to pull OpenLane image layers.
+FROM efabless/openlane:latest AS openlane-runner
 
+WORKDIR /work
+COPY --from=sma-base /app /work
 
-ENV LANG=en_US.UTF-8 \
-    LANGUAGE=en_US:en \
-    LC_ALL=en_US.UTF-8 \
-    JEKYLL_ENV=production
-
-RUN mkdir /srv/jekyll
-
-ADD Gemfile.lock /srv/jekyll
-ADD Gemfile /srv/jekyll
-
-WORKDIR /srv/jekyll
-
-# install jekyll and dependencies
-RUN gem install jekyll bundler
-
-RUN bundle install --no-cache
-# && rm -rf /var/lib/gems/3.1.0/cache
-EXPOSE 8080
-
-COPY bin/entry_point.sh /tmp/entry_point.sh
-
-CMD ["/tmp/entry_point.sh"]
+# Generate DEF hint first, then invoke OpenLane flow
+ENTRYPOINT ["/bin/bash", "-c", \
+  "python main.py --export-def && \
+   flow.tcl -design openlane -tag sma_run -overwrite"]

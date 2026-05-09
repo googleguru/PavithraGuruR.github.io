@@ -1,0 +1,12 @@
+VERSION 5.8 ;
+DESIGN tt_um_alu4_sma ;
+UNITS DISTANCE MICRONS 1000 ;
+
+COMPONENTS 4 ;
+   - A_in sky130_fd_sc_hd__buf_2 + PLACED ( 55000 126562 ) N ;
+   - B_in sky130_fd_sc_hd__buf_2 + PLACED ( 50000 131250 ) N ;
+   - ALU_core sky130_fd_sc_hd__buf_2 + PLACED ( 50000 126562 ) N ;
+   - F_out sky130_fd_sc_hd__buf_2 + PLACED ( 35000 126562 ) N ;
+END COMPONENTS
+
+END DESIGN

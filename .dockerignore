@@ -1,3 +1,10 @@
-_site/
-.git/
-assets/
+.git
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+visuals/*.png
+tt_chip_rom.bin
+openlane/runs/
+openlane/floorplan_hint.def
+.dockerignore

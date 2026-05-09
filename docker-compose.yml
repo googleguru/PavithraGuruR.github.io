@@ -1,13 +1,49 @@
-version: "3"
-# this file uses prebuilt image in dockerhub
+version: "3.9"
+
+# ── tt_um_alu4_sma — SMA + OpenLane + TinyTapeout ────────────────────────────
+
 services:
-  jekyll:
-    image: amirpourmand/al-folio:latest
-    build: .
-    ports:
-      - 8080:8080
-      - 35729:35729
+
+  # ── SMA placement + visual generation ─────────────────────────────────────
+  sma:
+    build:
+      context: .
+      target: sma-base
+    image: alu4-sma:latest
+    container_name: alu4_sma
     volumes:
-      - .:/srv/jekyll
+      - ./visuals:/app/visuals          # persist generated PNGs to host
+      - ./openlane:/app/openlane        # persist DEF hint to host
+    command: ["--all-circuits", "--save-visuals", "--export-def", "--validate"]
     environment:
-      - JEKYLL_ENV=development
+      - MPLBACKEND=Agg
+
+  # ── TinyTapeout ROM builder ────────────────────────────────────────────────
+  rom-builder:
+    build:
+      context: .
+      target: sma-base
+    image: alu4-sma:latest
+    container_name: alu4_rom
+    volumes:
+      - .:/app/out
+    command: ["--export-rom"]
+
+  # ── OpenLane RTL→GDSII flow ────────────────────────────────────────────────
+  # Requires the SMA service to have generated openlane/floorplan_hint.def first.
+  # Run: docker compose run openlane
+  openlane:
+    image: efabless/openlane:latest
+    container_name: alu4_openlane
+    volumes:
+      - .:/work
+    working_dir: /work
+    command: >
+      bash -c "flow.tcl -design openlane -tag sma_run -overwrite"
+    depends_on:
+      sma:
+        condition: service_completed_successfully
+    profiles:
+      - full-flow                       # only run when explicitly requested
+
+volumes: {}

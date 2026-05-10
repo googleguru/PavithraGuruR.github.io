@@ -1,5 +1,6 @@
 """
-Renders the full SMA benchmark results as a styled PNG table.
+Renders the full SMA benchmark results as a publication-quality PNG table.
+White background, no overlapping content, dark text throughout.
 """
 from __future__ import annotations
 from pathlib import Path
@@ -8,31 +9,32 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 
-BG      = "#0d1117"
-HDR_85  = "#1f3a5f"   # blue  — ISCAS '85
-HDR_89  = "#1f4a2e"   # green — ISCAS '89
-ROW_A   = "#161b22"
-ROW_B   = "#0d1117"
-WHITE   = "#e6edf3"
-ANNO    = "#8b949e"
-GREEN   = "#3fb950"
-AMBER   = "#d29922"
-RED     = "#f85149"
+# ── palette ──────────────────────────────────────────────────────────────────
+BG      = "white"
+HDR_COL = "#f6f8fa"      # column header background
+ROW_A   = "#f6f8fa"      # alternating row A
+ROW_B   = "white"        # alternating row B
+TEXT    = "#1c2128"      # primary text
+ANNO    = "#57606a"      # secondary / annotation text
+BLUE    = "#0969da"      # ISCAS'85 accent
+GREEN   = "#1a7f37"      # ISCAS'89 accent / ≥15% improvement
+AMBER   = "#9a6700"      # 5–15% improvement
+RED     = "#cf222e"      # <5% or negative improvement
+BORDER  = "#d0d7de"      # cell border
 
 COLS = ["Circuit", "Series", "Cells", "Nets",
         "Grid", "Die (µm²)", "Init HPWL", "SMA HPWL",
         "Improv %", "Agents", "Iters", "Time (s)"]
 
-COL_W = [0.072, 0.072, 0.055, 0.055,
-         0.065, 0.080, 0.080, 0.080,
-         0.072, 0.055, 0.050, 0.065]
+COL_W = [0.073, 0.073, 0.056, 0.056,
+         0.065, 0.082, 0.082, 0.082,
+         0.073, 0.056, 0.051, 0.066]
 
 
 def _improv_color(pct: float) -> str:
-    if pct >= 15:  return GREEN
-    if pct >= 5:   return AMBER
+    if pct >= 15: return GREEN
+    if pct >= 5:  return AMBER
     return RED
 
 
@@ -40,14 +42,14 @@ def plot_results_table(
     rows: list[dict],
     out_dir: Path = Path("visuals"),
 ) -> Path:
-    """
-    rows: list of dicts with keys matching COLS (lower-snake).
-    """
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "sma_results_table.png"
 
     n_rows = len(rows)
-    fig_h  = max(6, 0.30 * n_rows + 1.4)
+
+    # ── figure sizing ─────────────────────────────────────────────────────────
+    row_in = 0.155   # inches per data row at 150 DPI
+    fig_h  = max(7.0, n_rows * row_in + 2.2)
     fig    = plt.figure(figsize=(18, fig_h), facecolor=BG, dpi=150)
     ax     = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, 1)
@@ -55,36 +57,52 @@ def plot_results_table(
     ax.axis("off")
     ax.set_facecolor(BG)
 
-    # ── title ────────────────────────────────────────────────────────────────
-    fig.text(0.5, 0.97,
-             "SMA Global Placement — ISCAS'85 + ISCAS'89 Complete Benchmark Suite  |  ASAP7 7nm",
-             ha="center", va="top", color=WHITE, fontsize=11, fontweight="bold")
-    fig.text(0.5, 0.945,
-             f"39 circuits · Vectorised HPWL · Adaptive agents/iterations · "
-             f"1 unit = {1.08} µm (ASAP7 row height)",
+    # ── column x-positions ────────────────────────────────────────────────────
+    x0       = 0.010
+    x_starts = np.concatenate([[x0], x0 + np.cumsum(COL_W)])
+
+    # ── vertical layout (no overlap: title → header → rows → legend) ─────────
+    title_y    = 0.970
+    subtitle_y = 0.945
+    body_top   = 0.918
+    legend_bot = 0.012
+    legend_h   = 0.030
+
+    available = body_top - (legend_bot + legend_h + 0.018)
+    row_h     = available / (n_rows + 1)   # +1 for the header row
+    header_y  = body_top - row_h
+
+    # ── title ─────────────────────────────────────────────────────────────────
+    fig.text(0.5, title_y,
+             "SMA Global Placement — ISCAS'85 + ISCAS'89 Benchmark Suite  |  ASAP7 7nm",
+             ha="center", va="top", color=TEXT, fontsize=11, fontweight="bold")
+    fig.text(0.5, subtitle_y,
+             f"39 circuits  ·  Vectorised HPWL (numpy.reduceat)  ·  Adaptive agent budget"
+             f"  ·  1 grid unit = 1.08 µm (ASAP7 row height)",
              ha="center", va="top", color=ANNO, fontsize=7.5)
 
-    # ── column positions ─────────────────────────────────────────────────────
-    x_starts = np.concatenate([[0.01], 0.01 + np.cumsum(COL_W)])
-
-    body_top    = 0.905
-    row_h       = (body_top - 0.03) / (n_rows + 1)   # +1 for header
-    header_y    = body_top - row_h
-
-    # ── header ───────────────────────────────────────────────────────────────
+    # ── column headers ────────────────────────────────────────────────────────
     for j, (col, xs) in enumerate(zip(COLS, x_starts)):
         ax.add_patch(plt.Rectangle((xs, header_y), COL_W[j], row_h,
-                                   facecolor="#1c2d3e", edgecolor="#30363d", lw=0.4))
+                                   facecolor=HDR_COL, edgecolor=BORDER,
+                                   lw=0.5, zorder=1))
         ax.text(xs + COL_W[j] / 2, header_y + row_h / 2, col,
-                ha="center", va="center", color=WHITE,
+                ha="center", va="center", color=TEXT,
                 fontsize=6.5, fontweight="bold")
 
     # ── data rows ─────────────────────────────────────────────────────────────
+    prev_series = None
     for i, row in enumerate(rows):
-        y     = header_y - (i + 1) * row_h
-        is85  = row["series"] == "ISCAS'85"
-        bg    = ROW_A if i % 2 == 0 else ROW_B
-        imp   = row["improvement"]
+        y    = header_y - (i + 1) * row_h
+        is85 = row["series"] == "ISCAS'85"
+        bg   = ROW_A if i % 2 == 0 else ROW_B
+        imp  = row["improvement"]
+
+        # Thin separator between ISCAS suites
+        if row["series"] != prev_series and prev_series is not None:
+            ax.add_patch(plt.Rectangle((x0, y + row_h), sum(COL_W), 0.0014,
+                                       facecolor=BORDER, zorder=3))
+        prev_series = row["series"]
 
         values = [
             row["circuit"],
@@ -93,52 +111,50 @@ def plot_results_table(
             f"{row['n_nets']:,}",
             row["grid"],
             row["die"],
-            f"{row['init_hpwl']:.1f}",
-            f"{row['sma_hpwl']:.1f}",
-            f"{imp:.1f}",
+            f"{row['init_hpwl']:,.0f}",
+            f"{row['sma_hpwl']:,.0f}",
+            f"{imp:+.1f}",
             str(row["n_agents"]),
             str(row["max_iter"]),
             f"{row['runtime']:.1f}",
         ]
 
         for j, (val, xs) in enumerate(zip(values, x_starts)):
-            # Background
             ax.add_patch(plt.Rectangle((xs, y), COL_W[j], row_h,
-                                       facecolor=bg, edgecolor="#21262d", lw=0.3))
-            # Text colour
-            if j == 0:          col = "#58a6ff" if is85 else "#3fb950"
-            elif j == 8:        col = _improv_color(imp)
-            elif j == 1:        col = "#58a6ff" if is85 else "#3fb950"
-            else:               col = WHITE
+                                       facecolor=bg, edgecolor=BORDER,
+                                       lw=0.3, zorder=1))
+            if j == 0:
+                col, fw = (BLUE if is85 else GREEN), "bold"
+            elif j == 1:
+                col, fw = (BLUE if is85 else GREEN), "normal"
+            elif j == 8:
+                col, fw = _improv_color(imp), "bold"
+            else:
+                col, fw = TEXT, "normal"
 
-            fw = "bold" if j in (0, 8) else "normal"
             ax.text(xs + COL_W[j] / 2, y + row_h / 2, val,
                     ha="center", va="center", color=col,
-                    fontsize=6.0, fontweight=fw)
+                    fontsize=6.2, fontweight=fw)
 
     # ── legend ────────────────────────────────────────────────────────────────
-    legend_y = 0.022
-    for lbl, col in [("ISCAS'85 combinational", "#58a6ff"),
-                     ("ISCAS'89 sequential",    "#3fb950"),
-                     ("Improv ≥ 15%",           GREEN),
-                     ("Improv 5–15%",            AMBER),
-                     ("Improv < 5%",             RED)]:
-        ax.add_patch(plt.Rectangle((0.01, legend_y - 0.005), 0.012, 0.014,
-                                   facecolor=col, edgecolor="none"))
-        ax.text(0.025, legend_y + 0.002, lbl, color=ANNO, fontsize=6.5, va="center")
-        legend_y += 0.0    # same line, shift x
-        # use next column
-    # Redo properly in a row
-    lx = 0.01
-    for lbl, col in [("ISCAS'85 combinational", "#58a6ff"),
-                     ("ISCAS'89 sequential",    "#3fb950"),
-                     ("Improv ≥ 15%",           GREEN),
-                     ("Improv 5–15%",            AMBER),
-                     ("Improv < 5%",             RED)]:
-        ax.add_patch(plt.Rectangle((lx, 0.010), 0.010, 0.012,
-                                   facecolor=col, edgecolor="none"))
-        ax.text(lx + 0.013, 0.016, lbl, color=ANNO, fontsize=6.2, va="center")
-        lx += 0.175
+    patch_h = legend_h * 0.55
+    patch_w = 0.012
+    lx      = x0
+
+    legend_items = [
+        ("ISCAS'85 combinational",     BLUE),
+        ("ISCAS'89 sequential",        GREEN),
+        ("Improv ≥ 15%",               GREEN),
+        ("Improv 5–15%",               AMBER),
+        ("Improv < 5% or negative",    RED),
+    ]
+    for lbl, col in legend_items:
+        ax.add_patch(plt.Rectangle((lx, legend_bot + (legend_h - patch_h) / 2),
+                                   patch_w, patch_h,
+                                   facecolor=col, edgecolor="none", zorder=2))
+        ax.text(lx + patch_w + 0.006, legend_bot + legend_h / 2,
+                lbl, color=ANNO, fontsize=6.5, va="center")
+        lx += 0.178
 
     fig.savefig(out_path, dpi=150, facecolor=BG, bbox_inches="tight")
     plt.close(fig)

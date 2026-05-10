@@ -4,6 +4,9 @@
 > **ISCAS '85** (11 combinational) and **ISCAS '89** (28 sequential) benchmark
 > circuits on the **ASAP7 7nm predictive PDK**, with OpenLane RTL→GDSII
 > integration and TinyTapeout ROM support.
+>
+> All visuals are publication-quality white-background PNGs (180 DPI) generated
+> by `python main.py --all-iscas --save-visuals`.
 
 ---
 
@@ -62,35 +65,56 @@
 
 > **Total runtime: 64.3 s · Mean HPWL improvement: 5.4% · 39 circuits**
 > Adaptive token budget: ≤ 1 500 agent-iterations per circuit.
+> s208 (−0.9%) and s298 (−6.5%) show slight regression — the random seed
+> produces a near-optimal initial placement for these small dense netlists.
 
 ---
 
 ## DIE Area — Chip Layout Samples
 
-### ISCAS'85 c17 (13 cells · 10.8×10.8 µm · ASAP7) — 48.5% improvement
+Chip layouts are rendered for all circuits with ≤ 2 000 cells (29 of 39).
+Each plot shows the ASAP7 standard-cell rows (VDD/VSS alternating stripes),
+routing-grid overlay, net HPWL bounding boxes (dashed), and cell rectangles
+colour-coded by type. Physical µm scale on both X axes.
+
+### ISCAS'85 c17 — 13 cells · 10.8×10.8 µm · **48.5% HPWL improvement**
 ![c17 chip layout](visuals/chip_layout_c17.png)
 
-### ISCAS'85 c880 (469 cells · 37.8×37.8 µm · ASAP7)
+### ISCAS'85 c432 — 203 cells · 27.0×27.0 µm
+![c432 chip layout](visuals/chip_layout_c432.png)
+
+### ISCAS'85 c880 — 469 cells · 37.8×37.8 µm
 ![c880 chip layout](visuals/chip_layout_c880.png)
 
-### ISCAS'89 s27 (24 cells · 10.8×10.8 µm · ASAP7) — 31.9% improvement
+### ISCAS'85 c1908 — 938 cells · 54.0×54.0 µm
+![c1908 chip layout](visuals/chip_layout_c1908.png)
+
+### ISCAS'89 s27 — 24 cells · 10.8×10.8 µm · **31.9% HPWL improvement**
 ![s27 chip layout](visuals/chip_layout_s27.png)
 
-### ISCAS'89 s953 (492 cells · 37.8×37.8 µm · ASAP7) — 9.8% improvement
+### ISCAS'89 s953 — 492 cells · 37.8×37.8 µm · **9.8% HPWL improvement**
 ![s953 chip layout](visuals/chip_layout_s953.png)
 
-### ISCAS'89 s1423 (753 cells · 48.6×48.6 µm · ASAP7)
+### ISCAS'89 s1423 — 753 cells · 48.6×48.6 µm
 ![s1423 chip layout](visuals/chip_layout_s1423.png)
 
 ---
 
 ## SMA Convergence
 
+Best fitness normalised by each circuit's initial random-placement HPWL, so
+all circuits share a common y-axis (1.0 = initial, lower = better).
+Wong colorblind-safe palette; 7 representative circuits selected for clarity.
+
 ![Convergence](visuals/convergence.png)
 
 ---
 
-## HPWL Improvement (All Circuits)
+## HPWL Improvement — All 39 Circuits
+
+Horizontal improvement-% bars split by ISCAS suite.
+Blue bars = ISCAS '85 combinational; green bars = ISCAS '89 sequential.
+Red bars indicate circuits where SMA did not improve on the random baseline.
 
 ![HPWL Comparison](visuals/hpwl_comparison.png)
 
@@ -108,13 +132,13 @@
 │   ├── metrics.py         # Vectorised HPWL (numpy.reduceat) + adaptive params
 │   └── placement.py       # SMA: PreparedNets, adaptive agents/iters
 ├── visualize/
-│   ├── chip_layout.py     # DIE area renderer (cells, rails, net bboxes)
-│   ├── convergence.py     # Convergence + HPWL bar chart
-│   └── results_table.py   # Full benchmark results table PNG
+│   ├── chip_layout.py     # DIE area renderer — white bg, 2-col legend, pub quality
+│   ├── convergence.py     # Normalised convergence + per-suite HPWL bar chart
+│   └── results_table.py   # 39-row styled PNG table, no-overlap layout
 ├── src/                   # RTL: alu_4bit.v, tt_um_alu4_sma.v
 ├── openlane/              # ASAP7 config.tcl, constraints.sdc, DEF bridge
 ├── tinytapeout/           # info.yaml validator + 256-byte ROM builder
-├── visuals/               # Generated PNGs (all committed)
+├── visuals/               # 32 generated PNGs (all committed, 180 DPI)
 ├── Dockerfile             # sma-base + openlane-runner stages
 ├── docker-compose.yml     # sma / rom-builder / openlane services
 ├── main.py                # CLI: --all-iscas, --save-visuals, etc.
@@ -154,13 +178,13 @@ Penalty (n > 120): 80 × Σ_bins (density − 2.2·target)²      ← O(n)  hist
 
 **Adaptive token budget** — keeps ≤ 1 500 agent-iterations regardless of circuit size:
 
-| Circuit size  | Agents | Iters | Budget |
-|---------------|-------:|------:|-------:|
-| ≤ 100 cells   |     15 |   100 |  1 500 |
-| ≤ 500 cells   |     12 |    60 |    720 |
-| ≤ 2 000 cells |     10 |    40 |    400 |
-| ≤ 10 000 cells|      8 |    25 |    200 |
-| > 10 000 cells|      5 |    15 |     75 |
+| Circuit size   | Agents | Iters | Budget |
+|----------------|-------:|------:|-------:|
+| ≤ 100 cells    |     15 |   100 |  1 500 |
+| ≤ 500 cells    |     12 |    60 |    720 |
+| ≤ 2 000 cells  |     10 |    40 |    400 |
+| ≤ 10 000 cells |      8 |    25 |    200 |
+| > 10 000 cells |      5 |    15 |     75 |
 
 **SMA update per agent:**
 ```python
@@ -177,24 +201,35 @@ W  = 1 + r · log((fit_min − fit_i)/range + 1)  # slime weight
 
 ## ASAP7 PDK
 
-| Parameter       | Value                        |
-|-----------------|------------------------------|
-| Technology      | 7 nm predictive (ASU)        |
-| Cell library    | `asap7sc7p5t_SIMPLE_RVT_TYP` |
-| Row height      | **1.08 µm** (7.5-track)      |
-| Site width      | 0.216 µm                     |
-| Target clock    | 1 GHz                        |
-| Core utilisation| 50 %                         |
+| Parameter        | Value                        |
+|------------------|------------------------------|
+| Technology       | 7 nm predictive (ASU)        |
+| Cell library     | `asap7sc7p5t_SIMPLE_RVT_TYP` |
+| Row height       | **1.08 µm** (7.5-track)      |
+| Site width       | 0.216 µm                     |
+| Target clock     | 1 GHz                        |
+| Core utilisation | 50 %                         |
 
 ---
 
 ## ISCAS Benchmark Statistics
 
-| Suite     | Circuits | Cell range     | Net range      | Die range (µm²)     |
-|-----------|:--------:|---------------:|---------------:|--------------------:|
-| ISCAS '85 |       11 | 13 – 3 827     | 11 – 3 719     | 10.8² – 97.2²       |
-| ISCAS '89 |       28 | 24 – 23 949    | 13 – 23 815    | 10.8² – 243.0²      |
-| **Total** |   **39** | **13 – 23 949**| **11 – 23 815**| **10.8² – 243.0²** |
+| Suite     | Circuits | Cell range      | Net range      | Die range (µm²)      |
+|-----------|:--------:|----------------:|---------------:|---------------------:|
+| ISCAS '85 |       11 | 13 – 3 827      | 11 – 3 719     | 10.8² – 97.2²        |
+| ISCAS '89 |       28 | 24 – 23 949     | 13 – 23 815    | 10.8² – 243.0²       |
+| **Total** |   **39** | **13 – 23 949** | **11 – 23 815**| **10.8² – 243.0²**  |
+
+---
+
+## Visualisation Details
+
+| Plot | File | Description |
+|------|------|-------------|
+| Results table | `sma_results_table.png` | 39-row PNG, alternating rows, dark text on white, improvement colour-coded |
+| Chip layout | `chip_layout_<name>.png` | DIE area with power rails, routing grid, net bboxes, colour-coded cells; 29 circuits ≤ 2 000 cells |
+| Convergence | `convergence.png` | Normalised best fitness vs iteration; Wong colorblind palette; 7 representative circuits |
+| HPWL comparison | `hpwl_comparison.png` | Horizontal improvement-% bars split into ISCAS'85 / ISCAS'89 panels |
 
 ---
 
